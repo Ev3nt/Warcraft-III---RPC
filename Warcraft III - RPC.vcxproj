@@ -62,7 +62,7 @@
     <ClInclude Include="Src\Discord RPC\discord_rpc.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Src\README.MD" />
+    <None Include="README.MD" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
