@@ -6,19 +6,31 @@
 
 #define MakePtr(a, b) (DWORD)((DWORD)a + (DWORD)b)
 
-enum Mode
+typedef BOOL(__fastcall* _jassRun)(DWORD a0);
+_jassRun jassRun;
+DWORD jassRunCallOffset = 0x3b0a90;
+
+HMODULE gameBase = GetModuleHandle("game.dll");
+int* party_size = (int*)MakePtr(gameBase, 0xab4e08);
+
+LPCSTR APPLICATION_ID = "905895401415114752";
+
+BOOL __fastcall jassRun_Detour(DWORD a0);
+
+void call(LPVOID address, LPVOID function);
+
+void MainThread();
+
+DiscordRichPresence discordPresence;
+
+enum MODE
 {
     NONE,
     INMENU,
     INGAME
 };
 
-HMODULE gameBase = GetModuleHandle("game.dll");
-
-LPCSTR APPLICATION_ID = "905895401415114752";
-Mode mode = NONE;
-
-void MainThread();
+MODE mode = NONE;
 
 //-----------------------------------------------------------------------------------
 
@@ -82,34 +94,45 @@ void handleDiscordJoinRequest(const DiscordUser* request)
 
 void updateDiscordPresence(DiscordRichPresence& discordPresence)
 {
-    // if (SendPresence) {
-        // DiscordRichPresence discordPresence;
-        // ZeroMemory(&discordPresence, sizeof(discordPresence));
-        // discordPresence.state = "(2)BootyBay.w3m"; // Location 00AAE7C0
-        // discordPresence.details = "Skirmish (Lobby)"; // Detail
-        // discordPresence.startTimestamp = time(0);
-        // discordPresence.largeImageKey = "ingame";
-        // discordPresence.partyId = "party-1";
-        // discordPresence.partySize = 1; // Game.dll+AB4E08
-        // discordPresence.partyMax = 6; // ["Game.dll"+00AB65F4] + 44
+    Discord_UpdatePresence(&discordPresence);
+    ZeroMemory(&discordPresence, sizeof(discordPresence));
+}
 
-        Discord_UpdatePresence(&discordPresence);
-        ZeroMemory(&discordPresence, sizeof(discordPresence));
+BOOL __fastcall jassRun_Detour(DWORD a0)
+{
+    mode = INGAME;
 
-        // SendPresence = 0;
-    // }
-    //  else {
-    //      Discord_ClearPresence();
-    // }
+    std::string state = (LPSTR)MakePtr(gameBase, 0xaae7c0);
+
+    size_t begin = state.size();
+    for (; begin > 0 && state[begin - 1] != '\\'; begin--);
+    state = state.substr(begin, state.size() - begin - 4);
+
+    discordPresence.details = "In battle";
+    discordPresence.largeImageKey = "warcraft_icon";
+    discordPresence.smallImageKey = "battle_icon";
+    discordPresence.state = state.c_str();
+    discordPresence.partySize = *party_size;
+    discordPresence.partyMax = *(int*)(*(DWORD*)MakePtr(gameBase, 0xab65f4) + 0x44);
+    discordPresence.startTimestamp = time(0);
+
+    updateDiscordPresence(discordPresence);
+
+    return jassRun(a0);
 }
 
 //-----------------------------------------------------------------------------------
 
 void MainThread()
 {
-	DiscordEventHandlers handlers;
+    jassRun = (_jassRun)(*(DWORD*)MakePtr(gameBase, jassRunCallOffset + 1) + MakePtr(gameBase, jassRunCallOffset + 5));
+    call((LPVOID)MakePtr(gameBase, jassRunCallOffset), jassRun_Detour);
+
+    ZeroMemory(&discordPresence, sizeof(discordPresence));
+
+    DiscordEventHandlers handlers;
     ZeroMemory(&handlers, sizeof(handlers));
-	handlers.ready = handleDiscordReady;
+    handlers.ready = handleDiscordReady;
 	handlers.disconnected = handleDiscordDisconnected;
 	handlers.errored = handleDiscordError;
 	handlers.joinGame = handleDiscordJoin;
@@ -118,64 +141,16 @@ void MainThread()
 
 	Discord_Initialize(APPLICATION_ID, &handlers, 1, NULL);
 
-    std::string state;
-    int* party_size = (int*)MakePtr(gameBase, 0xab4e08);
-
-    DiscordRichPresence discordPresence;
-    ZeroMemory(&discordPresence, sizeof(discordPresence));
-
     while (true)
     {
-        switch (mode)
+        if (!*party_size && mode != INMENU)
         {
-        case NONE:
+            mode = INMENU;
+
             discordPresence.details = "In menu";
             discordPresence.largeImageKey = "warcraft_icon";
 
             updateDiscordPresence(discordPresence);
-
-            mode = INMENU;
-
-            break;
-        case INMENU:
-            if (*party_size && *(DWORD*)MakePtr(gameBase, 0xab65f4))
-            {
-                Sleep(1000);
-
-                state = (LPSTR)MakePtr(gameBase, 0xaae7c0);
-                
-                size_t begin = state.size();
-                for (; begin > 0 && state[begin - 1] != '\\'; begin--);
-                state = state.substr(begin, state.size() - begin - 4);
-
-                discordPresence.details = "In battle";
-                discordPresence.largeImageKey = "warcraft_icon";
-                discordPresence.smallImageKey = "battle_icon";
-                discordPresence.state = state.c_str();
-                discordPresence.partySize = *party_size;
-                discordPresence.partyMax =  *(int*)(*(DWORD*)MakePtr(gameBase, 0xab65f4) + 0x44);
-                discordPresence.startTimestamp = time(0);
-
-                updateDiscordPresence(discordPresence);
-
-                mode = INGAME;
-            }
-
-            break;
-        case INGAME:
-            if (!*party_size)
-            {
-                discordPresence.details = "In menu";
-                discordPresence.largeImageKey = "warcraft_icon";
-
-                updateDiscordPresence(discordPresence);
-
-                mode = INMENU;
-            }
-
-            break;
-        default:
-            break;
         }
 
 #ifdef DISCORD_DISABLE_IO_THREAD
@@ -183,4 +158,15 @@ void MainThread()
 #endif
         Discord_RunCallbacks();
     }
+}
+
+//-----------------------------------------------------------------------------------
+
+void call(LPVOID address, LPVOID function)
+{
+    DWORD oldProtect;
+    VirtualProtect(address, 5, PAGE_EXECUTE_READWRITE, &oldProtect);
+    *(BYTE*)address = 0xe8;
+    *(DWORD*)((DWORD)address + 1) = (DWORD)function - ((DWORD)address + 5);
+    VirtualProtect(address, 5, oldProtect, NULL);
 }
