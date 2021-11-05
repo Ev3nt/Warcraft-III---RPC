@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <iostream>
 #include <string>
 #include <time.h>
 #include <discord_rpc.h>
@@ -25,22 +24,28 @@ void MainThread();
 
 BOOL APIENTRY DllMain(HMODULE hModule, UINT ul_reason_for_call, LPVOID lpReserve)
 {
-	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
-	{
-		if (gameBase)
-		{
-			DisableThreadLibraryCalls(hModule);
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+        if (gameBase)
+        {
+            DisableThreadLibraryCalls(hModule);
+            
+            CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)MainThread, NULL, NULL, NULL);
+        }
+        else
+        {
+            return FALSE;
+        }
 
-			HANDLE thread = CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)MainThread, NULL, NULL, NULL);
-			CloseHandle(thread);
-		}
-		else
-		{
-			return FALSE;
-		}
-	}
+        break;
+    case DLL_PROCESS_DETACH:
+        Discord_ClearPresence();
+        Discord_Shutdown();
+        FreeLibraryAndExitThread(hModule, NULL);
+    }
 
-	return TRUE;
+    return TRUE;
 }
 
 //-----------------------------------------------------------------------------------
@@ -119,7 +124,7 @@ void MainThread()
     DiscordRichPresence discordPresence;
     ZeroMemory(&discordPresence, sizeof(discordPresence));
 
-    while (FindWindow(NULL, "Warcraft III"))
+    while (true)
     {
         switch (mode)
         {
@@ -178,6 +183,4 @@ void MainThread()
 #endif
         Discord_RunCallbacks();
     }
-
-	Discord_Shutdown();
 }
