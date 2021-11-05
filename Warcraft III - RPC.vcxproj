@@ -44,22 +44,36 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)3rd\Discord RPC\Include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)3rd\Discord RPC\Lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Src\discord_rpc\connection_win.cpp" />
+    <ClCompile Include="Src\discord_rpc\discord_register_win.cpp" />
+    <ClCompile Include="Src\discord_rpc\discord_rpc.cpp" />
+    <ClCompile Include="Src\discord_rpc\rpc_connection.cpp" />
+    <ClCompile Include="Src\discord_rpc\serialization.cpp" />
     <ClCompile Include="Src\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Src\Discord RPC\discord_register.h" />
     <ClInclude Include="Src\Discord RPC\discord_rpc.h" />
+    <ClInclude Include="Src\discord_rpc\backoff.h" />
+    <ClInclude Include="Src\discord_rpc\connection.h" />
+    <ClInclude Include="Src\discord_rpc\discord_register.h" />
+    <ClInclude Include="Src\discord_rpc\discord_rpc.h" />
+    <ClInclude Include="Src\discord_rpc\msg_queue.h" />
+    <ClInclude Include="Src\discord_rpc\rpc_connection.h" />
+    <ClInclude Include="Src\discord_rpc\serialization.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.MD" />

@@ -1,8 +1,7 @@
 #include <windows.h>
 #include <string>
 #include <time.h>
-#include <discord_rpc.h>
-#pragma comment(lib, "discord-rpc.lib")
+#include "discord_rpc/discord_rpc.h"
 
 #define MakePtr(a, b) (DWORD)((DWORD)a + (DWORD)b)
 
@@ -11,7 +10,6 @@ _jassRun jassRun;
 DWORD jassRunCallOffset = 0x3b0a90;
 
 HMODULE gameBase = GetModuleHandle("game.dll");
-int* party_size = (int*)MakePtr(gameBase, 0xab4e08);
 
 LPCSTR APPLICATION_ID = "905895401415114752";
 
@@ -21,16 +19,13 @@ void call(LPVOID address, LPVOID function);
 
 void MainThread();
 
-DiscordRichPresence discordPresence;
-
-enum MODE
-{
-    NONE,
+enum MODE {
     INMENU,
     INGAME
 };
 
-MODE mode = NONE;
+MODE mode = INMENU;
+BOOL sendPresence = 1;
 
 //-----------------------------------------------------------------------------------
 
@@ -39,14 +34,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, UINT ul_reason_for_call, LPVOID lpReserve
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
-        if (gameBase)
-        {
+        if (gameBase)  {
             DisableThreadLibraryCalls(hModule);
             
             CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)MainThread, NULL, NULL, NULL);
         }
-        else
-        {
+        else {
             return FALSE;
         }
 
@@ -101,22 +94,7 @@ void updateDiscordPresence(DiscordRichPresence& discordPresence)
 BOOL __fastcall jassRun_Detour(DWORD a0)
 {
     mode = INGAME;
-
-    std::string state = (LPSTR)MakePtr(gameBase, 0xaae7c0);
-
-    size_t begin = state.size();
-    for (; begin > 0 && state[begin - 1] != '\\'; begin--);
-    state = state.substr(begin, state.size() - begin - 4);
-
-    discordPresence.details = "In battle";
-    discordPresence.largeImageKey = "warcraft_icon";
-    discordPresence.smallImageKey = "battle_icon";
-    discordPresence.state = state.c_str();
-    discordPresence.partySize = *party_size;
-    discordPresence.partyMax = *(int*)(*(DWORD*)MakePtr(gameBase, 0xab65f4) + 0x44);
-    discordPresence.startTimestamp = time(0);
-
-    updateDiscordPresence(discordPresence);
+    sendPresence = 1;
 
     return jassRun(a0);
 }
@@ -128,6 +106,7 @@ void MainThread()
     jassRun = (_jassRun)(*(DWORD*)MakePtr(gameBase, jassRunCallOffset + 1) + MakePtr(gameBase, jassRunCallOffset + 5));
     call((LPVOID)MakePtr(gameBase, jassRunCallOffset), jassRun_Detour);
 
+    DiscordRichPresence discordPresence;
     ZeroMemory(&discordPresence, sizeof(discordPresence));
 
     DiscordEventHandlers handlers;
@@ -139,18 +118,51 @@ void MainThread()
 	handlers.spectateGame = handleDiscordSpectate;
 	handlers.joinRequest = handleDiscordJoinRequest;
 
+    int* party_size = (int*)MakePtr(gameBase, 0xab4e08);
+
 	Discord_Initialize(APPLICATION_ID, &handlers, 1, NULL);
 
-    while (true)
-    {
-        if (!*party_size && mode != INMENU)
-        {
+    while (true) {
+        if (!*party_size && mode != INMENU) {
             mode = INMENU;
+            sendPresence = 1;
+        }
 
-            discordPresence.details = "In menu";
-            discordPresence.largeImageKey = "warcraft_icon";
+        switch (mode)
+        {
+        case INMENU:
+            if (sendPresence) {
+                sendPresence = 0;
 
-            updateDiscordPresence(discordPresence);
+                discordPresence.details = "In menu";
+                discordPresence.largeImageKey = "warcraft_icon";
+
+                updateDiscordPresence(discordPresence);
+            }
+
+            break;
+        case INGAME:
+            if (sendPresence) {
+                sendPresence = 0;
+
+                std::string state = (LPSTR)MakePtr(gameBase, 0xaae7c0);
+
+                size_t begin = state.size();
+                for (; begin > 0 && state[begin - 1] != '\\'; begin--);
+                state = state.substr(begin, state.size() - begin - 4);
+
+                discordPresence.details = "In battle";
+                discordPresence.largeImageKey = "warcraft_icon";
+                discordPresence.smallImageKey = "battle_icon";
+                discordPresence.state = state.c_str();
+                discordPresence.partySize = *party_size;
+                discordPresence.partyMax = *(int*)(*(DWORD*)MakePtr(gameBase, 0xab65f4) + 0x44);
+                discordPresence.startTimestamp = time(0);
+
+                updateDiscordPresence(discordPresence);
+            }
+
+            break;
         }
 
 #ifdef DISCORD_DISABLE_IO_THREAD
